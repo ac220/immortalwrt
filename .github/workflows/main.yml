@@ -1,0 +1,28 @@
+name: Build ImmortalWrt for Radxa E20C
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:  # 允许手动触发
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout ImmortalWrt
+        uses: actions/checkout@v3
+        with:
+          repository: your_username/immortalwrt  # 替换为你的 ImmortalWrt Fork
+          submodules: recursive
+
+      - name: Add RK3528A support
+        run: |
+          git clone https://github.com/unifreq/openwrt_packit
+          cp -rf openwrt_packit/rk35xx/* package/  # 复制 RK35xx 设备支持文件
+
+      - name: Build Image
+        run: |
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+          make menuconfig  # 配置目标设备（见下一步）
+          make -j$(nproc) V=s
