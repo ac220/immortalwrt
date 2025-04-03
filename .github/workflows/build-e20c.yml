@@ -21,8 +21,8 @@ jobs:
         cp kernel/arch/arm64/boot/dts/rockchip/rk3528-e20c.dts \
           immortalwrt/target/linux/rockchip/files/arch/arm64/boot/dts/rockchip/rk3528a-e20c.dts
         
-        # 添加设备定义
-        cat >> immortalwrt/target/linux/rockchip/image/armv8.mk <<EOF
+        # 添加设备定义 (使用YAML多行语法)
+        cat >> immortalwrt/target/linux/rockchip/image/armv8.mk << 'EOF'
 define Device/rockship_e20c
   DEVICE_VENDOR := Rockship
   DEVICE_MODEL := E20C
