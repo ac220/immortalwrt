@@ -1,0 +1,43 @@
+name: Build ImmortalWrt for E20C
+
+on: [push, workflow_dispatch]
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Prepare RK3528 Files
+      run: |
+        # 克隆设备树仓库
+        git clone https://github.com/radxa/kernel --depth=1 -b stable-6.6.y
+        mkdir -p immortalwrt/target/linux/rockchip/files/arch/arm64/boot/dts/rockchip
+        
+        # 复制正确的DTS文件
+        cp kernel/arch/arm64/boot/dts/rockchip/rk3528-e20c.dts \
+          immortalwrt/target/linux/rockchip/files/arch/arm64/boot/dts/rockchip/rk3528a-e20c.dts
+        
+        # 添加设备定义
+        cat >> immortalwrt/target/linux/rockchip/image/armv8.mk <<EOF
+define Device/rockship_e20c
+  DEVICE_VENDOR := Rockship
+  DEVICE_MODEL := E20C
+  SOC := rk3528a
+  DEVICE_DTS := rockchip/rk3528a-e20c
+  IMAGE/sysupgrade.img := append-kernel | pad-to 16M | append-rootfs | pad-rootfs
+endef
+TARGET_DEVICES += rockship_e20c
+EOF
+
+    - name: Build with Docker
+      uses: docker/build-push-action@v4
+      with:
+        context: ./immortalwrt
+        push: false
+        tags: immortalwrt-builder
+        build-args: |
+          MAKE_JOBS=$(nproc)
