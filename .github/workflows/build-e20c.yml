@@ -22,23 +22,32 @@ jobs:
         ref: v24.10.0
         path: immortalwrt
 
-    - name: Add Device Support
-      run: |
-        cd immortalwrt
-        # 复制DTS文件
-        wget https://raw.githubusercontent.com/radxa/kernel/stable-6.6.y/arch/arm64/boot/dts/rockchip/rk3528-e20c.dts \
-          -O target/linux/rockchip/files/arch/arm64/boot/dts/rockchip/rk3528a-e20c.dts
-        
-        # 修改设备定义
-        sed -i '/TARGET_DEVICES +=/a define Device/rockship_e20c\n  DEVICE_VENDOR := Rockship\n  DEVICE_MODEL := E20C\n  SOC := rk3528a\n  DEVICE_DTS := rockchip/rk3528a-e20c\n  IMAGE/sysupgrade.img := append-kernel | pad-to 16M | append-rootfs | pad-rootfs\nendef\nTARGET_DEVICES += rockship_e20c' \
-          target/linux/rockchip/image/armv8.mk
-
-    - name: Setup Build Environment
+    - name: Setup Docker Buildx
       uses: docker/setup-buildx-action@v2
       with:
         driver-opts: network=host
 
-    - name: Start Docker Build
+    - name: Add Device Support
+      run: |
+        cd immortalwrt
+        # 下载瑞莎官方DTS
+        wget https://raw.githubusercontent.com/radxa/kernel/stable-6.6.y/arch/arm64/boot/dts/rockchip/rk3528-e20c.dts \
+          -O target/linux/rockchip/files/arch/arm64/boot/dts/rockchip/rk3528a-e20c.dts
+
+        # 自动修改设备定义
+        cat >> target/linux/rockchip/image/armv8.mk <<EOF
+define Device/rockship_e20c
+  DEVICE_VENDOR := Rockship
+  DEVICE_MODEL := E20C
+  SOC := rk3528a
+  DEVICE_DTS := rockchip/rk3528a-e20c
+  IMAGE/sysupgrade.img := append-kernel | pad-to 16M | append-rootfs | pad-rootfs
+  DEVICE_PACKAGES := kmod-r8169 kmod-usb-ohci kmod-usb2
+endef
+TARGET_DEVICES += rockship_e20c
+EOF
+
+    - name: Build with Docker
       run: |
         cd immortalwrt
         docker run --rm -it \
@@ -49,25 +58,26 @@ jobs:
           /bin/bash -c "
             ./scripts/feeds update -a &&
             ./scripts/feeds install -a &&
-            make menuconfig <<< $'\n\n\n' &&
+            echo 'CONFIG_TARGET_rockchip_rk35xx=y' >> .config &&
+            echo 'CONFIG_TARGET_rockchip_armv8=y' >> .config &&
             make -j$(nproc) V=s
           "
 
     - name: Upload Artifacts
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4  # 注意这里升级到v4
       with:
         name: immortalwrt-${{ env.DEVICE }}-${{ github.sha }}
-        path: immortalwrt/bin/targets/rockchip/armv8/
-        retention-days: 7
+        path: immortalwrt/bin/targets/rockchip/armv8/*
+        retention-days: 3
 
-    - name: Telegram Notification
+    - name: Notify Telegram
       if: always()
       uses: appleboy/telegram-action@master
       with:
         to: ${{ secrets.TELEGRAM_CHAT_ID }}
         token: ${{ secrets.TELEGRAM_TOKEN }}
         message: |
-          *Build ${{ job.status }}!*
+          *Build ${{ job.status }}*
           Device: ${{ env.DEVICE }}
-          Commit: ${{ github.sha }}
-          Logs: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          Commit: [${{ github.sha }}](https://github.com/${{ github.repository }}/commit/${{ github.sha }})
+          [Download Artifacts](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
